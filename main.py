@@ -10,15 +10,19 @@ from utils.update_checker import check_for_updates
 from utils.cleanup import clean_old_tokens
 from keep_alive import keep_alive
 
-# Secrets from Render
+# Load secrets
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
 MONGO_URI = os.getenv("MONGODB_URI")
-DEX_API_URL = os.getenv("DEX_SCREENER_URL")
 
+# Use direct API URL (not secret)
+DEX_API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana"
+
+# Discord bot setup
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# MongoDB setup
 mongo = MongoClient(MONGO_URI)
 db = mongo['coin_alerts']
 collection = db['tokens']
@@ -33,7 +37,7 @@ async def on_ready():
 @tasks.loop(seconds=30)
 async def scan_tokens():
     try:
-        response = requests.get(f"{DEX_API_URL}/solana", timeout=10)
+        response = requests.get(DEX_API_URL, timeout=10)
 
         if response.status_code != 200:
             print(f"❌ DEX API Error: Status {response.status_code}")
