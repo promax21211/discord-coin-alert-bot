@@ -33,11 +33,22 @@ async def on_ready():
 @tasks.loop(seconds=30)
 async def scan_tokens():
     try:
-        response = requests.get(f"{DEX_API_URL}/solana")
-        data = response.json().get("pairs", [])
+        response = requests.get(f"{DEX_API_URL}/solana", timeout=10)
+
+        if response.status_code != 200:
+            print(f"❌ DEX API Error: Status {response.status_code}")
+            return
+
+        try:
+            data = response.json().get("pairs", [])
+        except Exception as e:
+            print("❌ JSON Decode Error:", e)
+            print("Raw Response:", response.text[:200])
+            return
+
         for token in data[:10]:
-            address = token['pairAddress']
-            if collection.find_one({"address": address}):
+            address = token.get('pairAddress')
+            if not address or collection.find_one({"address": address}):
                 continue
 
             if not is_strong_token(token):
@@ -45,7 +56,8 @@ async def scan_tokens():
 
             embed = build_alert_embed(token)
             channel = bot.get_channel(CHANNEL_ID)
-            await channel.send(embed=embed)
+            if channel:
+                await channel.send(embed=embed)
 
             collection.insert_one({
                 "address": address,
@@ -54,8 +66,9 @@ async def scan_tokens():
                 "last_updated": token.get("pairCreatedAt", 0),
                 "update_count": 0
             })
+
     except Exception as e:
-        print("Error in scan_tokens:", e)
+        print("❌ scan_tokens crashed:", e)
 
 @tasks.loop(seconds=60)
 async def check_updates():
