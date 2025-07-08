@@ -10,15 +10,11 @@ from utils.update_checker import check_for_updates
 from utils.cleanup import clean_old_tokens
 from keep_alive import keep_alive
 
-# Load secrets
+# Load secrets from Render environment
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
+CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 MONGO_URI = os.getenv("MONGODB_URI")
 
-# Use direct API URL (not secret)
-DEX_API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana"
-
-# Discord bot setup
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -37,25 +33,29 @@ async def on_ready():
 @tasks.loop(seconds=30)
 async def scan_tokens():
     try:
-        response = requests.get(DEX_API_URL, timeout=10)
+        response = requests.get("https://api.dexscreener.com/token-boosts/latest/v1", timeout=10)
 
         if response.status_code != 200:
-            print(f"❌ DEX API Error: Status {response.status_code}")
+            print(f"❌ DEX Boost API Error: Status {response.status_code}")
             return
 
         try:
-            data = response.json().get("pairs", [])
+            all_tokens = response.json().get("pairs", [])
         except Exception as e:
             print("❌ JSON Decode Error:", e)
             print("Raw Response:", response.text[:200])
             return
 
-        for token in data[:10]:
+        solana_tokens = [
+            token for token in all_tokens
+            if token.get("chainId") == "solana"
+            and token.get("baseToken", {}).get("name")
+            and is_strong_token(token)
+        ]
+
+        for token in solana_tokens[:10]:
             address = token.get('pairAddress')
             if not address or collection.find_one({"address": address}):
-                continue
-
-            if not is_strong_token(token):
                 continue
 
             embed = build_alert_embed(token)
@@ -82,5 +82,8 @@ async def check_updates():
 async def clean_stale():
     clean_old_tokens(collection)
 
+# Keep Flask server alive (Render or Replit)
 keep_alive()
+
+# Run the Discord bot
 bot.run(TOKEN)
