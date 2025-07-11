@@ -40,7 +40,7 @@ async def scan_tokens():
             return
 
         try:
-            all_tokens = response.json().get("pairs", [])
+            all_tokens = response.json()  # ✅ FIXED: API returns a list, not a dict
         except Exception as e:
             print("❌ JSON Decode Error:", e)
             print("Raw Response:", response.text[:200])
